@@ -18,7 +18,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - smart-search
+      - hubspot-skedulo
 
   nginx:
     image: nginx:alpine
@@ -32,7 +32,7 @@ services:
     depends_on:
       - app
     networks:
-      - smart-search
+      - hubspot-skedulo
 
   mysql:
     image: mysql:8.4
@@ -55,7 +55,7 @@ services:
       retries: 12
       start_period: 30s
     networks:
-      - smart-search
+      - hubspot-skedulo
 
   redis:
     image: redis:alpine
@@ -71,10 +71,10 @@ services:
       timeout: 5s
       retries: 12
     networks:
-      - smart-search
+      - hubspot-skedulo
 
 networks:
-  smart-search:
+  hubspot-skedulo:
     driver: bridge
 
 volumes:
