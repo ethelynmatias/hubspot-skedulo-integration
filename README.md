@@ -1,58 +1,151 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# HubSpot–Skedulo Integration
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A Laravel application that integrates HubSpot with Skedulo. The whole development
+environment runs in Docker (PHP-FPM, Nginx, MySQL and Redis) and is driven through
+a `Makefile`.
 
-## About Laravel
+## Requirements
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- [Docker](https://docs.docker.com/get-docker/) with the Compose plugin (`docker compose`)
+- `make`
+- Node.js 20+ and npm — only needed for the frontend assets, which are built on the host
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+PHP and Composer are **not** required on the host; they live in the `app` container.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Installation
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+git clone <repository-url> hubspot-skedulo-integration
+cd hubspot-skedulo-integration
+make init
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+`make init` performs the full first-time setup:
 
-## Contributing
+1. `make env` — copies `.env.example` to `.env` (only if `.env` does not exist yet) and
+   sets `DOCKER_UID`/`DOCKER_GID` to your user so bind-mounted files stay writable.
+2. `make build` — builds the `app` image.
+3. `make up` — starts the containers.
+4. `make install` — runs `composer install` in the container and `npm install` on the host.
+5. `make key` — generates `APP_KEY`.
+6. `make migrate` — runs the database migrations.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+When it finishes the app is available at <http://localhost:8000> (or whatever
+`APP_PORT` is set to in `.env`).
 
-## Code of Conduct
+For the frontend during development, run the Vite dev server in a second terminal:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+make dev
+```
 
-## Security Vulnerabilities
+### Doing it by hand
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+If you would rather not use `make`:
 
-## License
+```bash
+cp .env.example .env
+docker compose build
+docker compose up -d
+docker compose exec app composer install
+docker compose exec app php artisan key:generate
+docker compose exec app php artisan migrate
+npm install && npm run dev
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Configuration
+
+Everything is configured through `.env`. The values worth knowing about:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `APP_PORT` | `8000` | Host port Nginx is published on |
+| `FORWARD_DB_PORT` | `3307` | Host port for MySQL, for a GUI client |
+| `FORWARD_REDIS_PORT` | `6380` | Host port for Redis |
+| `DOCKER_UID` / `DOCKER_GID` | `1000` | Host user ids the container runs as |
+| `DB_DATABASE` / `DB_USERNAME` / `DB_PASSWORD` | `hubspot_skedulo` / `hubspot_skedulo` / `secret` | Application database credentials |
+| `DB_ROOT_PASSWORD` | `root` | MySQL root password |
+
+`DB_HOST` and `REDIS_HOST` point at the `mysql` and `redis` service names — leave
+them as they are so the app can reach them over the Compose network.
+
+Changing `DB_*` or the forwarded ports after the stack has been created requires
+`make fresh-start` (which deletes the database volume) followed by `make up`.
+
+## Services
+
+| Service | Container | Description |
+| --- | --- | --- |
+| `app` | `hubspot-skedulo-app` | PHP 8.4 FPM with the application code |
+| `nginx` | `hubspot-skedulo-nginx` | Web server, published on `APP_PORT` |
+| `mysql` | `hubspot-skedulo-mysql` | MySQL 8.4, data kept in the `mysql-data` volume |
+| `redis` | `hubspot-skedulo-redis` | Redis for cache, sessions and queues |
+
+## Make targets
+
+Run `make help` to see this list in your terminal.
+
+### Setup
+
+| Target | Description |
+| --- | --- |
+| `make init` | First-time setup: env, build, start, install deps, key, migrate |
+| `make env` | Create `.env` and set `DOCKER_UID`/`DOCKER_GID` to your user |
+| `make install` | Install PHP and JS dependencies |
+| `make key` | Generate the application key |
+
+### Containers
+
+| Target | Description |
+| --- | --- |
+| `make build` | Build the app image |
+| `make up` | Start the stack in the background |
+| `make down` | Stop the stack |
+| `make restart` | Restart the stack |
+| `make fresh-start` | Stop the stack and delete its volumes (**drops the database**) |
+| `make ps` | Show container status |
+| `make logs` | Tail logs for all containers |
+| `make shell` | Open a shell in the app container |
+
+### Application
+
+| Target | Description |
+| --- | --- |
+| `make artisan cmd="route:list"` | Run any artisan command |
+| `make composer cmd="require vendor/pkg"` | Run any composer command |
+| `make migrate` | Run database migrations |
+| `make migrate-fresh` | Drop all tables, re-run migrations and seeders |
+| `make seed` | Run database seeders |
+| `make tinker` | Open a Tinker REPL |
+| `make queue` | Run the queue worker in the foreground |
+| `make fresh` | Clear cached config, routes, views and events |
+
+### Frontend
+
+| Target | Description |
+| --- | --- |
+| `make dev` | Run the Vite dev server on the host |
+| `make assets` | Build frontend assets for production |
+
+### Quality
+
+| Target | Description |
+| --- | --- |
+| `make test` | Run the test suite |
+| `make lint` | Format PHP with Pint |
+| `make lint-check` | Check PHP formatting without changing files |
+
+## Troubleshooting
+
+**Port already in use** — another service is on `APP_PORT`, `FORWARD_DB_PORT` or
+`FORWARD_REDIS_PORT`. Change the value in `.env` and run `make restart`.
+
+**Permission errors on `storage/` or `bootstrap/cache/`** — the container user's ids
+do not match yours. Run `make env` to fix them, then `make build && make up`.
+
+**`vendor/` looks empty on the host** — that is expected. `vendor` is a container-only
+volume, so run Composer through `make composer cmd="..."` rather than on the host.
+
+**MySQL connection refused right after `make up`** — MySQL is still initialising.
+The app container waits for its healthcheck; give it a few seconds and check
+`make logs`.
